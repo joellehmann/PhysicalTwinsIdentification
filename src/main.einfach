@@ -37,11 +37,10 @@
 #define Version "0.1.0"
 #define Date "31.08.2021"
 
-// I2C Address 0x01 to 0x09
 const int16_t I2C_MASTER = 0x42;
-int16_t I2C_SLAVE = 0x01;
+const int16_t I2C_SLAVE = 0x08;
 int count = 0;
-int j, k = 0;
+int j = 0;
 char c;
 char metaCount;
 char mesCount;
@@ -50,16 +49,11 @@ char buffertmp[200];
 bool bEOS;
 String sMeta;
 StaticJsonDocument<200> doc;
-byte error;
-int iAttDevs[2];
-int i2cCount;
-bool colreq = false;
 
 typedef struct
   {
     String key;
     String value;
-    String devid;
   }  kvp;
 
 kvp META[23];
@@ -318,6 +312,56 @@ void setup() {
   memset(jsonString, NULL, sizeof jsonString);
   
   //######################################################################
+  //Request Number of Metadata ###########################################
+  //######################################################################
+
+  Wire.beginTransmission(I2C_SLAVE);
+  Wire.write("reqMetaCount\n");
+  Wire.endTransmission();
+  delay(100);
+  Wire.requestFrom(I2C_SLAVE, 1);
+  while (Wire.available()) { 
+    c = Wire.read();
+    metaCount = c;      
+  }
+
+  //######################################################################
+  //Request Metadata #####################################################
+  //######################################################################
+
+  while (j < (int)metaCount-48)
+    {
+      Wire.beginTransmission(I2C_SLAVE);
+      Wire.write((String(j)+"\n").c_str());
+      Wire.endTransmission();  
+      delay(100);
+      Wire.requestFrom(I2C_SLAVE, 23);
+      while (Wire.available()) { 
+      c = Wire.read();
+      if (c != 255 && !bEOS) {   
+        sMeta += c;     
+      } else {
+        bEOS = true;
+      }
+    }
+    Serial.println("");
+    Serial.print("KVP1 ");
+    Serial.print(j);
+    Serial.print(" -> ");
+    META[j].key = sMeta.substring(0,sMeta.indexOf(":"));
+    META[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+    sMeta = "";
+    bEOS = false;
+
+    Serial.print(META[j].key);
+    Serial.print(":");
+    Serial.print(META[j].value);
+    Serial.println("");
+    j++;
+    }
+  j = 0;
+
+  //######################################################################
   // HTTP CREATE DITTO THING #############################################
   //######################################################################
 
@@ -339,180 +383,80 @@ void setup() {
         "room": "007" ,
       "attachedDevices": )=====");
 
-  //######################################################################
   //Building up ATTRIBUTES JSON ##########################################
-  //######################################################################
 
-  i2cCount = 0;
-
-  while(I2C_SLAVE < 0x09)
-  {
-    Wire.beginTransmission(I2C_SLAVE);
-    error = Wire.endTransmission();
-    if (error == 0)
-    {
-      Serial.print("Device found: ");
-      iAttDevs[i2cCount]=I2C_SLAVE;
-      Serial.println(iAttDevs[j]);
-      i2cCount++;
-    }
-    I2C_SLAVE++;
-  }
-
-  //######################################################################
-  //Request Number of Metadata ###########################################
-  //######################################################################
-
-  k = 0;
-  if (i2cCount > 1)
-  {
-    colreq = true;
-  }
-
-  if (i2cCount > 0)
-  {
-    while (k < i2cCount)
-    {
-      Wire.beginTransmission(iAttDevs[k]);
-      Wire.write("reqMetaCount\n");
-      Wire.endTransmission();
-      delay(100);
-      Wire.requestFrom(iAttDevs[k], 1);
-      while (Wire.available()) { 
-        c = Wire.read();
-        metaCount = c;      
-      }
-
-      while (j < (int)metaCount-48)
-        {
-          Wire.beginTransmission(iAttDevs[k]);
-          Wire.write((String(j)+"\n").c_str());
-          Wire.endTransmission();  
-          delay(100);
-          Wire.requestFrom(iAttDevs[k], 23);
-          while (Wire.available()) { 
-          c = Wire.read();
-          if (c != 255 && !bEOS) {   
-            sMeta += c;     
-          } else {
-            bEOS = true;
-          }
-        }
-        Serial.println("");
-        Serial.print("KVP1 ");
-        Serial.print(j);
-        Serial.print(" -> ");
-        META[j].key = sMeta.substring(0,sMeta.indexOf(":"));
-        META[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
-        sMeta = "";
-        bEOS = false;
-
-        Serial.print(META[j].key);
-        Serial.print(":");
-        Serial.print(META[j].value);
-        Serial.println("");
-        j++;
-        }
-      j = 0;
-
-      JsonObject devid = doc.createNestedObject(META[0].value);
-      j = 1;
-      
-      while (j < (int)metaCount-48) 
-      {
-        devid[META[j].key] = META[j].value;
-        j++;
-      }
-
-      serializeJson(doc, buffer);
-      j = 0;
-      doc.clear();
-
-      strcat(jsonString,buffer); 
-      memset(buffer, 0, sizeof buffer);
-
-      if (colreq && k < i2cCount - 1)
-      {
-        strcat(jsonString,",");
-      }
-      k++;
-    }
-  }
-
+  JsonObject devid = doc.createNestedObject(META[0].value);
+  j = 1;
   
-  
+  while (j < (int)metaCount-48) 
+  {
+    devid[META[j].key] = META[j].value;
+    j++;
+  }
+
+  serializeJson(doc, buffer);
+  j = 0;
+  doc.clear();
+
+  strcat(jsonString,buffer); 
+  memset(buffer, 0, sizeof buffer);
   strcat(jsonString,R"=====(},
       "features": {
       }
     }
   )=====");
 
-  Serial.println(jsonString);
+  //Serial.println(jsonString);
   httpResponse = DigitalTwinInstance.createDittoThing(jsonString);
 
   memset(jsonString, NULL, sizeof jsonString);
- delay(999999999);
+ 
   //######################################################################
   // HTTP CREATE DITTO THING FEATURES ####################################
   //######################################################################
 
-  strcpy(jsonString, R"=====(
-  {
-    "telemetry": {
-      "properties": )=====");
-
   //Building up FEATURES JSON ############################################
 
-  k = 0;
+  Wire.beginTransmission(I2C_SLAVE);  
+  Wire.write("reqMesCount\n");
+  Wire.endTransmission();
+  delay(100);
+  Wire.requestFrom(I2C_SLAVE, 1);
+  while (Wire.available()) { 
+    c = Wire.read();
+    mesCount = c;      
+  }
 
-  if (i2cCount > 0)
-  {
-    while (k < i2cCount)
+  while (j < (int)mesCount-48)
     {
-      Wire.beginTransmission(iAttDevs[k]);  
-      Wire.write("reqMesCount\n");
-      Wire.endTransmission();
+      Wire.beginTransmission(I2C_SLAVE);
+      Wire.write((String(j)+"\n").c_str());
+      Wire.endTransmission();  
       delay(100);
-      Wire.requestFrom(iAttDevs[k], 1);
+      Wire.requestFrom(I2C_SLAVE, 23);
       while (Wire.available()) { 
         c = Wire.read();
-        mesCount = c;      
-      }
-
-      while (j < (int)mesCount-48)
-        {
-          Wire.beginTransmission(iAttDevs[k]);
-          Wire.write((String(j)+"\n").c_str());
-          Wire.endTransmission();  
-          delay(100);
-          Wire.requestFrom(iAttDevs[k], 23);
-          while (Wire.available()) { 
-            c = Wire.read();
-            if (c != 255 && !bEOS) {   
-              sMeta += c;     
-            } else {
-              bEOS = true;
-            }
-          }
-          Serial.print("KVP2 ");
-          Serial.print(j);
-          Serial.print(" -> ");
-          MES[j].key = sMeta.substring(0,sMeta.indexOf(":"));
-          MES[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
-          MES[j].devid = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
-          sMeta = "";
-          bEOS = false;
-
-          Serial.print(MES[j].key);
-          Serial.print(":");
-          Serial.print(MES[j].value);
-          Serial.println("");
-          j++;
-          k++;
+        if (c != 255 && !bEOS) {   
+          sMeta += c;     
+        } else {
+          bEOS = true;
         }
-      j = 0;
+      }
+      Serial.print("KVP2 ");
+      Serial.print(j);
+      Serial.print(" -> ");
+      MES[j].key = sMeta.substring(0,sMeta.indexOf(":"));
+      MES[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+      sMeta = "";
+      bEOS = false;
+
+      Serial.print(MES[j].key);
+      Serial.print(":");
+      Serial.print(MES[j].value);
+      Serial.println("");
+      j++;
     }
-  }
+  j = 0;
 
   while (j < (int)mesCount-48) 
     {
@@ -528,7 +472,10 @@ void setup() {
     
     doc.clear();
 
-
+  strcpy(jsonString, R"=====(
+    {
+      "telemetry": {
+        "properties": )=====");
 
   strcat(jsonString,buffer);
   memset(buffer, 0, sizeof buffer);
