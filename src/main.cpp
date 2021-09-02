@@ -59,11 +59,17 @@ typedef struct
   {
     String key;
     String value;
+  }  kvpmeta;
+  
+typedef struct
+  {
+    String key;
+    String value;
     String devid;
-  }  kvp;
+  }  kvpmes;
 
-kvp META[23];
-kvp MES[23];
+kvpmeta META[23];
+kvpmes MES[23];
 
 String serverName;
 int httpResponseCode;
@@ -337,7 +343,7 @@ void setup() {
         "institute": "KVE",
         "building": "P",
         "room": "007" ,
-      "attachedDevices": )=====");
+      "attachedDevices": {)=====");
 
   //######################################################################
   //Building up ATTRIBUTES JSON ##########################################
@@ -353,7 +359,7 @@ void setup() {
     {
       Serial.print("Device found: ");
       iAttDevs[i2cCount]=I2C_SLAVE;
-      Serial.println(iAttDevs[j]);
+      Serial.println(iAttDevs[i2cCount]);
       i2cCount++;
     }
     I2C_SLAVE++;
@@ -373,6 +379,12 @@ void setup() {
   {
     while (k < i2cCount)
     {
+      Serial.print("");
+      Serial.print("I2C Device: ");
+      Serial.print(k+1);
+      Serial.print(" of ");
+      Serial.println(i2cCount);
+
       Wire.beginTransmission(iAttDevs[k]);
       Wire.write("reqMetaCount\n");
       Wire.endTransmission();
@@ -382,11 +394,21 @@ void setup() {
         c = Wire.read();
         metaCount = c;      
       }
-
+      
       while (j < (int)metaCount-48)
         {
+          Serial.println("");
+          Serial.print("Meta Count: ");
+          Serial.print(j+1);
+          Serial.print(" of ");
+          Serial.print(metaCount);
+          Serial.print(" to Address ");
+          Serial.println(iAttDevs[k]);
+          delay(100);
           Wire.beginTransmission(iAttDevs[k]);
+          delay(100);
           Wire.write((String(j)+"\n").c_str());
+          delay(100);
           Wire.endTransmission();  
           delay(100);
           Wire.requestFrom(iAttDevs[k], 23);
@@ -402,15 +424,22 @@ void setup() {
         Serial.print("KVP1 ");
         Serial.print(j);
         Serial.print(" -> ");
-        META[j].key = sMeta.substring(0,sMeta.indexOf(":"));
-        META[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+        if (sMeta != "")
+        {
+          META[j].key = sMeta.substring(0,sMeta.indexOf(":"));
+          META[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+          Serial.print(META[j].key);
+          Serial.print(":");
+          Serial.print(META[j].value);
+          Serial.println("");
+        } else
+        {
+          j--;
+        }
         sMeta = "";
         bEOS = false;
 
-        Serial.print(META[j].key);
-        Serial.print(":");
-        Serial.print(META[j].value);
-        Serial.println("");
+        
         j++;
         }
       j = 0;
@@ -424,12 +453,14 @@ void setup() {
         j++;
       }
 
-      serializeJson(doc, buffer);
+      serializeJson(doc, buffertmp);
+      strncat(buffer, buffertmp+1,strlen(buffertmp)-2);
       j = 0;
       doc.clear();
 
       strcat(jsonString,buffer); 
       memset(buffer, 0, sizeof buffer);
+      memset(buffertmp, 0, sizeof buffer);
 
       if (colreq && k < i2cCount - 1)
       {
@@ -441,7 +472,7 @@ void setup() {
 
   
   
-  strcat(jsonString,R"=====(},
+  strcat(jsonString,R"=====(}},
       "features": {
       }
     }
@@ -451,7 +482,7 @@ void setup() {
   httpResponse = DigitalTwinInstance.createDittoThing(jsonString);
 
   memset(jsonString, NULL, sizeof jsonString);
- delay(999999999);
+
   //######################################################################
   // HTTP CREATE DITTO THING FEATURES ####################################
   //######################################################################
@@ -459,16 +490,25 @@ void setup() {
   strcpy(jsonString, R"=====(
   {
     "telemetry": {
-      "properties": )=====");
+      "properties":{ )=====");
 
   //Building up FEATURES JSON ############################################
 
   k = 0;
-
+  if (i2cCount > 1)
+  {
+    colreq = true;
+  }
   if (i2cCount > 0)
   {
     while (k < i2cCount)
     {
+      Serial.print("");
+      Serial.print("I2C Device: ");
+      Serial.print(k+1);
+      Serial.print(" of ");
+      Serial.println(i2cCount);
+
       Wire.beginTransmission(iAttDevs[k]);  
       Wire.write("reqMesCount\n");
       Wire.endTransmission();
@@ -481,8 +521,18 @@ void setup() {
 
       while (j < (int)mesCount-48)
         {
+          Serial.println("");
+          Serial.print("Meta Count: ");
+          Serial.print(j+1);
+          Serial.print(" of ");
+          Serial.print(mesCount);
+          Serial.print(" to Address ");
+          Serial.println(iAttDevs[k]);
+          delay(100);
           Wire.beginTransmission(iAttDevs[k]);
+          delay(100);
           Wire.write((String(j)+"\n").c_str());
+          delay(100);
           Wire.endTransmission();  
           delay(100);
           Wire.requestFrom(iAttDevs[k], 23);
@@ -497,52 +547,59 @@ void setup() {
           Serial.print("KVP2 ");
           Serial.print(j);
           Serial.print(" -> ");
-          MES[j].key = sMeta.substring(0,sMeta.indexOf(":"));
-          MES[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
-          MES[j].devid = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+          if (sMeta != "")
+          {
+            // Andere Lauvariabl einbauen, sodass MES[] fortlaufend unabhängig vom Device weiterläuft, zum Abfragen der späteren Telemetriedaten!! TODO
+            MES[j].key = sMeta.substring(0,sMeta.indexOf(":"));
+            MES[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+            MES[j].devid = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+            Serial.print(MES[j].key);
+            Serial.print(":");
+            Serial.print(MES[j].value);
+            Serial.println("");
+          } else
+          {
+            j--;
+          }
           sMeta = "";
           bEOS = false;
 
-          Serial.print(MES[j].key);
-          Serial.print(":");
-          Serial.print(MES[j].value);
-          Serial.println("");
           j++;
-          k++;
+        }      
+        j = 0;
+
+        while (j < (int)mesCount-48) 
+        {
+          JsonObject mesid = doc.createNestedObject(MES[j].key);
+          mesid["value"] = "init";
+          mesid["unit"] = MES[j].value;
+          j++;
         }
-      j = 0;
+        serializeJson(doc, buffertmp);
+        strncat(buffer, buffertmp+1,strlen(buffertmp)-2);
+        j = 0;
+        doc.clear();
+        strcat(jsonString,buffer); 
+        memset(buffer, 0, sizeof buffer);
+        memset(buffertmp, 0, sizeof buffer);
+
+        if (colreq && k < i2cCount - 1)
+        {
+          strcat(jsonString,",");
+        }
+
+        k++;
     }
   }
 
-  while (j < (int)mesCount-48) 
-    {
-      JsonObject mesid = doc.createNestedObject(MES[j].key);
-      mesid["value"] = "init";
-      mesid["unit"] = MES[j].value;
-      j++;
-    }
-
-    serializeJson(doc, buffer);
-    Serial.println(buffer);
-    j = 0;
-    
-    doc.clear();
-
-
-
-  strcat(jsonString,buffer);
-  memset(buffer, 0, sizeof buffer);
-
-  strcat(jsonString,R"=====(   }
-    }
-  )=====");
+  strcat(jsonString,"}}}");
 
   Serial.println(jsonString);
 
   httpResponse = DigitalTwinInstance.createDittoFeatures(jsonString);
 
   memset(jsonString, NULL, sizeof jsonString);
-
+  delay(99999999);
   //######################################################################
   // HTTP CREATE NODERED DASHBOARD #######################################
   //######################################################################

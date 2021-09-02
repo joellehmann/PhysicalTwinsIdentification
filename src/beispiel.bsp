@@ -1,4 +1,24 @@
   //######################################################################
+  //Building up ATTRIBUTES JSON ##########################################
+  //######################################################################
+
+  i2cCount = 0;
+
+  while(I2C_SLAVE < 0x09)
+  {
+    Wire.beginTransmission(I2C_SLAVE);
+    error = Wire.endTransmission();
+    if (error == 0)
+    {
+      Serial.print("Device found: ");
+      iAttDevs[i2cCount]=I2C_SLAVE;
+      Serial.println(iAttDevs[i2cCount]);
+      i2cCount++;
+    }
+    I2C_SLAVE++;
+  }
+
+  //######################################################################
   //Request Number of Metadata ###########################################
   //######################################################################
 
@@ -12,6 +32,12 @@
   {
     while (k < i2cCount)
     {
+      Serial.print("");
+      Serial.print("I2C Device: ");
+      Serial.print(k+1);
+      Serial.print(" of ");
+      Serial.println(i2cCount);
+
       Wire.beginTransmission(iAttDevs[k]);
       Wire.write("reqMetaCount\n");
       Wire.endTransmission();
@@ -21,11 +47,21 @@
         c = Wire.read();
         metaCount = c;      
       }
-
+      
       while (j < (int)metaCount-48)
         {
+          Serial.println("");
+          Serial.print("Meta Count: ");
+          Serial.print(j+1);
+          Serial.print(" of ");
+          Serial.print(metaCount);
+          Serial.print(" to Address ");
+          Serial.println(iAttDevs[k]);
+          delay(100);
           Wire.beginTransmission(iAttDevs[k]);
+          delay(100);
           Wire.write((String(j)+"\n").c_str());
+          delay(100);
           Wire.endTransmission();  
           delay(100);
           Wire.requestFrom(iAttDevs[k], 23);
@@ -41,15 +77,22 @@
         Serial.print("KVP1 ");
         Serial.print(j);
         Serial.print(" -> ");
-        META[j].key = sMeta.substring(0,sMeta.indexOf(":"));
-        META[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+        if (sMeta != "")
+        {
+          META[j].key = sMeta.substring(0,sMeta.indexOf(":"));
+          META[j].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+          Serial.print(META[j].key);
+          Serial.print(":");
+          Serial.print(META[j].value);
+          Serial.println("");
+        } else
+        {
+          j--;
+        }
         sMeta = "";
         bEOS = false;
 
-        Serial.print(META[j].key);
-        Serial.print(":");
-        Serial.print(META[j].value);
-        Serial.println("");
+        
         j++;
         }
       j = 0;
@@ -63,12 +106,14 @@
         j++;
       }
 
-      serializeJson(doc, buffer);
+      serializeJson(doc, buffertmp);
+      strncat(buffer, buffertmp+1,strlen(buffertmp)-2);
       j = 0;
       doc.clear();
 
       strcat(jsonString,buffer); 
       memset(buffer, 0, sizeof buffer);
+      memset(buffertmp, 0, sizeof buffer);
 
       if (colreq && k < i2cCount - 1)
       {
@@ -80,7 +125,7 @@
 
   
   
-  strcat(jsonString,R"=====(},
+  strcat(jsonString,R"=====(}},
       "features": {
       }
     }
@@ -89,4 +134,4 @@
   Serial.println(jsonString);
   httpResponse = DigitalTwinInstance.createDittoThing(jsonString);
 
-  memset(jsonString, 0, sizeof jsonString);
+  memset(jsonString, NULL, sizeof jsonString);
